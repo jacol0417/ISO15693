@@ -29,6 +29,7 @@ NXP 自定義通道：真正能直接修改 UID 的是晶片特有的 0x40 與 0
 C++
 uint8_t part1[4] = { rawBytes[4], rawBytes[5], rawBytes[6], rawBytes[7] }; // 後半段送到前半
 uint8_t part2[4] = { rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3] }; // 前半段送到後半
+
 第四階段：最終完美寫入流程（大功告成）
 當接收到使用者的目標卡號後，整個自動化執行的精準流程如下：
 
