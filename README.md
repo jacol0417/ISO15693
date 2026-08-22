@@ -1,69 +1,46 @@
-# ISO15693
-ESP32+PN5180
+第一階段：硬體介面與基礎環境建立
+硬體架構：以 ESP32 為核心，透過 SPI 介面與 PN5180 高效能 NFC 前端晶片通訊。
 
-函式庫修正方式 (PN5180ISO15693 或對應的標頭檔)
-原版的 PN5180 函式庫通常會把底層指令發送函式（如 issueISO15693Command）宣告為 private 或 protected，這會導致你在主程式寫入 0x40 和 0x41 時發生編譯錯誤。
+腳位配置：
 
-1. 打開標頭檔（例如 PN5180ISO15693.h 或主類別標頭檔）
-找到宣告 ISO 15693 專屬指令發送的方法，將其存取權限從 private 改為 public：
+SPI 訊號：MOSI (GPIO 13)、MISO (GPIO 12)、SCK (GPIO 14)、NSS/CS (GPIO 15)。
 
-class PN5180ISO15693 {
-public:
-    // 🔍 必須確保這個函式宣告在 public 區塊底下！
-    ISO15693ErrorCode issueISO15693Command(uint8_t *cmd, uint8_t cmdLen, uint8_t **responsePtr);
+控制訊號：BUSY (GPIO 5)、RST (GPIO 17)。
 
-    // 其他原本的公開函式...
-    void setupRF();
-    void setRF_off();
-    void setRF_on();
-    // ...
-};
+初始挑戰：原版函式庫將 ISO 15693 專屬的底層傳輸函式宣告為 private，導致自定義指令無法呼叫。
 
-避免 CRC 與 Framing 錯誤：如果使用一般通用的 transceiveCommand 去送 0x40 / 0x41，PN5180 的硬體層常會自動附加或搞錯 ISO 15693 特有的 EOF/SOF 與 CRC 格式，導致卡片直接無回應或回傳錯誤。
+解法：修改 PN5180ISO15693.h，將 issueISO15693Command 提升為 public，並確保 .cpp 中對 0x40 與 0x41 等非標準自定義指令碼放行，打通底層通道。
 
-精準控制自定義指令：透過公開的 issueISO15693Command，函式庫才能正確處理晶片底層的傳輸協議時序，讓帶有 0x02, 0xE0, 0x09, 0x40 的自定義 payload 完美送達魔術卡晶片中。
+第二階段：ISO 15693 讀取與目標卡號釐清
+讀取機制：發送標準 ISO 15693 Inventory 指令，成功取得卡片回傳的 8-byte LSB 原始 UID，並在前端/序列埠正確解析呈現為 16 碼 Hex 格式（例如 E00781B8AF144207）。
 
+核心盲點：人類與標準系統習慣輸入正向高位元組在前（MSB）的目標卡號（例如 074214AFB88107E0），但 NXP 晶片與魔術卡在暫存區的記憶體佈局帶有特殊的位元組對應與鏡像特性。
 
-<img width="805" height="694" alt="image" src="https://github.com/user-attachments/assets/9a9c20e7-3692-4907-9de4-e3e6c8815adf" />
+第三階段：魔術卡寫入規律的突破（Gen2 專屬特性）
+經過多次序列埠除錯與對調測試，我們發現這張 ISO 15693 Gen2 魔術卡具備以下硬體特性：
 
-ISO 15693 Gen2 魔術卡讀寫邏輯架構
-1. 讀取邏輯 (Inventory & Read)
-尋卡 (Inventory)：送出標準 ISO 15693 尋卡指令。
+略過區塊寫入：原本嘗試用 Flag 42（Write Single Block）寫入實體區塊，但卡片在接收 UID 更改時會進入忙碌狀態並回傳 No card detected!。實測證明，根本不需要 Flag 42。
 
-取得 UID：接收卡片回傳的 8-byte LSB 原始 UID。
+NXP 自定義通道：真正能直接修改 UID 的是晶片特有的 0x40 與 0x41 底層指令。
 
-格式化：將讀回來的 8 bytes 轉為 16 碼 Hex 字串（例如：E00781B8AF144207）。
+位元組大對調：
+輸入的標準 16 碼 UID 經 hexToBytes 切成 rawBytes[0..7] 後，必須將前半段與後半段直接大對調，才能完美抵銷晶片內部的鏡像特性：
 
-2. 寫入邏輯 (Gen2 魔術卡專屬單次直通)
-當接收到標準 16 碼 MSB 目標卡號（例如：074214AFB88107E0）時，底層的轉換與執行步驟如下：
+C++
+uint8_t part1[4] = { rawBytes[4], rawBytes[5], rawBytes[6], rawBytes[7] }; // 後半段送到前半
+uint8_t part2[4] = { rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3] }; // 前半段送到後半
+第四階段：最終完美寫入流程（大功告成）
+當接收到使用者的目標卡號後，整個自動化執行的精準流程如下：
 
-步驟 A：位元組切割與通道對應（解決晶片反轉特性）
+位元組智慧對應：自動將標準 MSB 卡號切換成魔術卡硬體唯一認得的排列順序（part1 與 part2）。
 
-// 假設透過 hexToBytes 取得 8 bytes 原始陣列
-byte[] rawBytes = HexToBytes(targetUidHex);
+發送自定義指令：
 
-// 實測對應：將後半段與前半段大對調，完美抵銷晶片內部的鏡像特性
-byte[] part1 = new byte[] { rawBytes[4], rawBytes[5], rawBytes[6], rawBytes[7] }; 
-byte[] part2 = new byte[] { rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3] };
+透過 0x40 寫入 part1
 
-步驟 B：發送 NXP 自定義 UID 覆寫指令 (0x40 與 0x41)
-透過 SPI 與 PN5180 依序送出指令：
+透過 0x41 寫入 part2
 
-發送 0x40：封包格式為 [0x02, 0xE0, 0x09, 0x40, part1... ]
+EEPROM 永久保存：
+執行 RF 磁場重置（setRF_off() 搭配短暫延遲後再 setRF_on()），強制讓晶片將暫存區的 UID 永久寫入內部 EEPROM。
 
-發送 0x41：封包格式為 [0x02, 0xE0, 0x09, 0x41, part2... ]
-(註：此時晶片已接收暫存修改，不需執行會報錯的 Flag 42 區塊寫入)
-
-步驟 C：重置 RF 磁場使 EEPROM 永久保存
-指令發送完成後，透過開關 RF 磁場觸發晶片內部將暫存寫入 EEPROM：
-
-nfc15693.SetRF_off();
-Thread.Sleep(150);
-nfc15693.SetRF_on();
-Thread.Sleep(100);
-
-
-
-
-
-
+驗證成功：重新讀卡，完美呈現目標卡號 074214AFB88107E0，單次直通、乾淨俐落！
