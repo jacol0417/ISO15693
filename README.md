@@ -1,3 +1,10 @@
+<img width="284" height="511" alt="image" src="https://github.com/user-attachments/assets/6ea9c397-7583-4269-a91b-93b3786b61d4" />
+
+<img width="500" height="500" alt="image" src="https://github.com/user-attachments/assets/867bc39c-1998-459a-b8d8-723a73ee9f88" />
+
+
+
+
 第一階段：硬體介面與基礎環境建立
 
 硬體架構：以 ESP32 為核心，透過 SPI 介面與 PN5180 高效能 NFC 前端晶片通訊。
