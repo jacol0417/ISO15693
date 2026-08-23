@@ -90,26 +90,6 @@
 
 ---
 
-## ⚙️ 核心演算法與寫入流程
-
-```cpp
-// Gen2 魔術卡 UID 寫入關鍵邏輯範例 (C++)
-
-// 1. 陣列對調處理 (切分前後 4 位元組並互換)
-uint8_t part1[4] = { rawBytes[4], rawBytes[5], rawBytes[6], rawBytes[7] }; // 後半段送到前面 (0x40)
-uint8_t part2[4] = { rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3] }; // 前半段送到後面 (0x41)
-
-// 2. 發送自定義寫入指令
-nfc.issueISO15693Command(0x40, part1, sizeof(part1));
-nfc.issueISO15693Command(0x41, part2, sizeof(part2));
-
-// 3. 重置 RF 磁場以促使 EEPROM 寫入生效
-nfc.setRF_off();
-delay(150);
-nfc.setRF_on();
-
----
-
 ## 🔍 問題排除與經驗總結 (Troubleshooting)
 
 1. **`issueISO15693Command` 無法呼叫**：
@@ -127,3 +107,23 @@ nfc.setRF_on();
 ## 📄 授權條款 (License)
 
 本專案採用 [MIT License](LICENSE) 釋出，僅供學術研究與 RFID 技術探討使用。
+
+---
+
+## ⚙️ 核心演算法與寫入流程
+
+```cpp
+// Gen2 魔術卡 UID 寫入關鍵邏輯範例 (C++)
+
+// 1. 陣列對調處理 (切分前後 4 位元組並互換)
+uint8_t part1[4] = { rawBytes[4], rawBytes[5], rawBytes[6], rawBytes[7] }; // 後半段送到前面 (0x40)
+uint8_t part2[4] = { rawBytes[0], rawBytes[1], rawBytes[2], rawBytes[3] }; // 前半段送到後面 (0x41)
+
+// 2. 發送自定義寫入指令
+nfc.issueISO15693Command(0x40, part1, sizeof(part1));
+nfc.issueISO15693Command(0x41, part2, sizeof(part2));
+
+// 3. 重置 RF 磁場以促使 EEPROM 寫入生效
+nfc.setRF_off();
+delay(150);
+nfc.setRF_on();
