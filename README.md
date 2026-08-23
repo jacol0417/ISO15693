@@ -107,3 +107,21 @@ nfc.issueISO15693Command(0x41, part2, sizeof(part2));
 nfc.setRF_off();
 delay(150);
 nfc.setRF_on();
+
+## 🔍 問題排除與經驗總結 (Troubleshooting)
+
+1. **`issueISO15693Command` 無法呼叫**：
+   * **原因**：C++ 標頭檔 (`PN5180ISO15693.h`) 將該函式設為 `private`。
+   * **解法**：修改標頭檔將其移至 `public` 區塊，並確認 `.cpp` 未攔截 `0x40`/`0x41` 指令。
+2. **寫入後 UID 顛倒**：
+   * **原因**：NXP 寫入暫存器存在前後段鏡像特性。
+   * **解法**：將 8-byte 原始陣列的 `Bytes[0..3]` 與 `Bytes[4..7]` 交換後再發送。
+3. **寫入後出現 `No card detected` 警告**：
+   * **原因**：發送 `0x40`/`0x41` 後執行冗餘的 `Flag 42` 區塊寫入。
+   * **解法**：移除 `Flag 42` 指令，發送寫入指令後直接重置 RF 磁場。
+
+---
+
+## 📄 授權條款 (License)
+
+本專案採用 [MIT License](LICENSE) 釋出，僅供學術研究與 RFID 技術探討使用。
