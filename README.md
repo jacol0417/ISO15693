@@ -108,6 +108,8 @@ nfc.setRF_off();
 delay(150);
 nfc.setRF_on();
 
+---
+
 ## 🔍 問題排除與經驗總結 (Troubleshooting)
 
 1. **`issueISO15693Command` 無法呼叫**：
